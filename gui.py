@@ -4,10 +4,7 @@ import chess
 from mcts_pure import MCTSPlayer as mcts_pure
 from pygame.locals import *
 from tkinter import *
-from tkinter import messagebox
-
-
-
+import pop_dialog
 
 
 class Settings(object):
@@ -28,19 +25,8 @@ class Settings(object):
                 k+=1
 
 
-
 class GUI(object):
 
-    def __init__(self):
-        self.root = Tk()
-        self.root.title("hello world")
-        self.root.geometry('300x300')
-        l1 = Label(self.root, text="xls名：")
-        l1.pack()  # 这里的side可以赋值为LEFT  RTGHT TOP  BOTTOM
-        self.xls_text = StringVar()
-        xls = Entry(self.root, textvariable=self.xls_text)
-        self.xls_text.set(" ")
-        xls.pack()
 
     def is_chess_clicked(self,position, event):
 
@@ -48,9 +34,6 @@ class GUI(object):
             if (each.collidepoint(event.pos)):
                 return position.index(each)
         return None
-
-    def on_click(self):
-        return self.xls_text.get()
 
 
     def run_game(self):
@@ -98,13 +81,11 @@ class GUI(object):
             screen.blit(chess_board,(chess_board_x,chess_board_y))
 
             d = (950-55)/8
-            #piece_x, piece_y = 55+(j-1)*d, 55+(i-1)*d
-
             for i in range(64):
                 if board.piece_at(i):
                     piece = board.piece_at(i).piece_type
                     color = board.piece_at(i).color
-                    #print(piece,i)
+
                     if color:
                         piece = images[piece][0]
                     else:
@@ -121,100 +102,96 @@ class GUI(object):
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
-                #try:
-                if board.turn == True:
-                    if event.type == MOUSEBUTTONDOWN:
-                        if event.button == 1:
-                            selected_position = self.is_chess_clicked(chess_sets.position, event)
-                            select_piece = board.piece_at(selected_position)
+                try:
+                    if board.turn == True:
+                        if event.type == MOUSEBUTTONDOWN:
+                            if event.button == 1:
+                                selected_position = self.is_chess_clicked(chess_sets.position, event)
+                                select_piece = board.piece_at(selected_position)
 
-                            if select_piece.color == True:
-                                from_position = selected_position
-                                print(from_position)
-                            else:
-                                pass
-
-
-                        if event.button == 3:
-                            selected_position = self.is_chess_clicked(chess_sets.position, event)
-                            to_position = selected_position
-                            a = [48,49,50,51,52,53,54,55]
-
-                            # The promotion precess of PAWN pieces
-                            if from_position in a and select_piece.piece_type == 1:
-                                a = Button(self.root, text="press", command=self.on_click).pack()
-                                print(a)
-                                self.root.mainloop()
-
-                                move = chess.Move(from_position, to_position, promotion = a)
-                                print(move)
-                            else:
-                                move = chess.Move(from_position, to_position)
-
-                            # Move check and make move
-                            if move not in board.legal_moves:
-                                print("invalide move!",move,board.legal_moves)
-                            else:
-                                board.push(move)
-                                move_stack += "," + board.peek().uci()
-                                myfont = pygame.font.SysFont('test',30)
-
-                                textsurface = myfont.render(move_stack,True,(0,0,0))
-                                screen.blit(textsurface,(100,100))
+                                if select_piece.color == True:
+                                    from_position = selected_position
+                                    print(from_position)
+                                else:
+                                    pass
 
 
-                else:
-                    if event.type == MOUSEBUTTONDOWN:
-                        if event.button == 1:
-                            selected_position = self.is_chess_clicked(chess_sets.position, event)
-                            select_piece = board.piece_at(selected_position)
+                            if event.button == 3:
+                                selected_position = self.is_chess_clicked(chess_sets.position, event)
+                                to_position = selected_position
+                                a = [48,49,50,51,52,53,54,55]
+                                # The promotion precess of PAWN pieces
+                                if from_position in a and select_piece.piece_type == 1:
+                                    #a = self.create_dialog()#
+                                    a = pop_dialog.main()
+                                    move = chess.Move(from_position, to_position, promotion = int(a), drop=None)
+                                    print(int(a),move)
+                                else:
+                                    move = chess.Move(from_position, to_position)
 
-                            if select_piece.color == False:
-                                from_position = selected_position
-                            else:
-                                pass
+                                # Move check and make move
+                                if move not in board.legal_moves:
+                                    print("invalide move!",move,board.legal_moves)
+                                else:
+                                    board.push(move)
+                                    move_stack += "," + board.peek().uci()
+                                    myfont = pygame.font.SysFont('test',30)
 
-                        if event.button == 3:
-                            selected_position = self.is_chess_clicked(chess_sets.position, event)
-                            to_position = selected_position
-                            a = [48,49,50,51,52,53,54,55]
-                            b = [56,57,58,59,60,61,62,63]
-                            if from_position in a and select_piece == 1:
-                                move = chess.Move(from_position, to_position, promotion=2, drop=None)
-                                print(move)
-                            else:
-                                move = chess.Move(from_position, to_position)
-                            if move not in board.legal_moves:
-                                print("invalide move!", move,from_position, board.legal_moves)
-                            else:
-                                board.push(chess.Move(from_position, to_position))
-                                move_stack += "," + board.peek().uci()
-                                myfont = pygame.font.SysFont('test', 30)
-                                textsurface = myfont.render(move_stack, True, (0, 0, 0))
-                                screen.blit(textsurface, (100, 100))
+                                    textsurface = myfont.render(move_stack,True,(0,0,0))
+                                    screen.blit(textsurface,(100,100))
+                    else:
+                        if event.type == MOUSEBUTTONDOWN:
+                            if event.button == 1:
+                                selected_position = self.is_chess_clicked(chess_sets.position, event)
+                                select_piece = board.piece_at(selected_position)
 
-                # else:
-                #     move = mcts_player.get_action(board)
-                #     board.push(chess.Move.from_uci(str(move)))
-                #     move_stack += "," + board.peek().uci()
-                #     print(move_stack)
-                #     myfont = pygame.font.SysFont('test', 30)
-                #     textsurface = myfont.render(move_stack, True, (0, 0, 0))
-                #     screen.blit(textsurface, (100, 100))
+                                if select_piece.color == True:
+                                    from_position = selected_position
+                                    print(from_position)
+                                else:
+                                    pass
 
+                            if event.button == 3:
+                                selected_position = self.is_chess_clicked(chess_sets.position, event)
+                                to_position = selected_position
+                                a = [48, 49, 50, 51, 52, 53, 54, 55]
+                                # The promotion precess of PAWN pieces
+                                if from_position in a and select_piece.piece_type == 1:
+                                    # a = self.create_dialog()#
+                                    a = pop_dialog.main()
+                                    move = chess.Move(from_position, to_position, promotion=int(a), drop=None)
+                                    print(int(a), move)
+                                else:
+                                    move = chess.Move(from_position, to_position)
 
+                                # Move check and make move
+                                if move not in board.legal_moves:
+                                    print("invalide move!", move, board.legal_moves)
+                                else:
+                                    board.push(move)
+                                    move_stack += "," + board.peek().uci()
+                                    myfont = pygame.font.SysFont('test', 30)
 
+                                    textsurface = myfont.render(move_stack, True, (0, 0, 0))
+                                    screen.blit(textsurface, (100, 100))
+
+                    # else:
+                    #     move = mcts_player.get_action(board)
+                    #     board.push(chess.Move.from_uci(str(move)))
+                    #     move_stack += "," + board.peek().uci()
+                    #     print(move_stack)
+                    #     myfont = pygame.font.SysFont('test', 30)
+                    #     textsurface = myfont.render(move_stack, True, (0, 0, 0))
+                    #     screen.blit(textsurface, (100, 100))
+                except:
+                    print("Error")
+                    continue
 
                 if board.is_variant_end():
                     if board.turn:
                         print("winner is : White side")
                     else:
                         print("winner is : Black side")
-                # except:
-                #     print("Error")
-                #     continue
-
-
 
             pygame.display.flip()
 
@@ -222,3 +199,4 @@ class GUI(object):
 if __name__ == '__main__':
     run = GUI()
     run.run_game()
+
