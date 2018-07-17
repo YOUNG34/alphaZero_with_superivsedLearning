@@ -1,0 +1,96 @@
+import numpy as np
+import tensorflow as tf
+
+class Policy_value_net():
+
+    def __init__(self):
+        self.model = None
+
+    def build_net(self):
+
+        self.input = tf.placeholder(tf.float32,shape=[None,18,8,8])
+        self.input = tf.transpose(self.input,[0,2,3,1])
+
+        # convoluiton layer one
+        self.conv1 = tf.layers.conv2d(inputs=self.input,
+                                      filters=256,kernal_size=5,
+                                      padding="same",data_format="channels_last",
+                                      activation=tf.nn.relu)
+
+        self.conv1 = tf.layers.batch_normalization(inputs=self.conv1,axis=1)
+
+        # resudual block
+        self.residual = self.conv1
+
+        for i in range(19):
+            self.residual = self.residual_block(self.residual,i+1)
+
+        res_out = self.residual
+
+        # for policy output
+        self.conv2 = tf.layers.conv2d(inputs=res_out,
+                                      filters=2, kernel_size=1,
+                                      data_format="channels_first",
+                                      kernel_regularizer=12*(1e-4),
+                                      activation=tf.nn.relu)
+        self.conv2 = tf.layers.batch_normalization(inputs=self.conv2,axis=1,name="batch_normalization")
+        self.conv2 = tf.layers.flatten(self.conv2,name="policy_flatten")
+        policy_out = tf.layers.dense(inputs=self.conv2,
+                                     units=256,
+                                     kernel_regularizer=12*(1e-4),
+                                     activation=tf.nn.softmax,
+                                     name="policy_out")
+
+        # for value output
+        self.conv3 = tf.layers.conv2d(inputs=res_out,
+                                      filters=4,
+                                      kernel_size=1,
+                                      data_format="channels_first",
+                                      use_bias=False,kernel_regularizer=12*(1e-4),
+                                      activation=tf.nn.relu,
+                                      name="value_conv-1-4")
+        self.conv3 = tf.layers.batch_normalization(inputs=self.conv3,
+                                                   axis=1,
+                                                   name="value_batchnorm")
+        self.conv3 = tf.layers.flatten(inputs=self.conv3,name="value_flatten")
+        self.conv3 = tf.layers.dense(inputs=self.conv3,
+                                     units=256,
+                                     kernel_regularizer=12*(1e-4),
+                                     name="value_dense")
+        value_out = tf.layer.dense(inputs=self.conv3,
+                                   units=1,
+                                   kernel_regularizer=12*(1e-4),
+                                   activation=tf.nn.tanh,
+                                   name="value_out")
+        self.model = tf.keras.Model(self.input,[policy_out, value_out],name="chess_model")
+
+
+    def residual_block(self,input,index):
+
+        res_name = "res" + index
+        x = tf.layers.conv2d(inputs=input,
+                             filters=256,
+                             kernel_size=3,
+                             padding="same",
+                             data_format="channels_first",
+                             use_bias=False,
+                             kernel_regularize=12*(1e-4),
+                             name=res_name+"_conv1-"+str(3)+"-"+str(256),
+                             activation=tf.nn.relu
+                             )
+        x = tf.layers.batch_normalization(inputs=x,
+                                          axis=1,
+                                          name=res_name+"_batchnorm1")
+
+        x =
+
+
+
+
+
+
+
+
+
+
+
