@@ -151,7 +151,14 @@ class Policy_value_net():
 
 
 
-
+import chess
+import numpy as np
+square_state = np.zeros((12,8,8))
+board = chess.BaseBoard()
+s = board.pieces(1,False)
+for i in s:
+    square_state[0][7 - i // 8, i%8] = 1
+square_state[0]
 
 
 
