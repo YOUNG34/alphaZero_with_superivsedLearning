@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+import chess
 from keras.engine.topology import Input
 from keras.engine.training import Model
 from keras.layers.convolutional import Conv2D
@@ -108,7 +109,19 @@ class Policy_value_net():
         if model_file is not None:
             self.restore_model(model_file)
 
+    def current_state(self):
+        square_state = np.zeros((12, 8, 8))
+        board = chess.BaseBoard()
+        for i in range(6):
+            s = board.pieces(i + 1, True)
+            for white_loc in s:
+                square_state[i][7 - white_loc // 8, white_loc % 8] = 1
 
+        for black_i in range(6):
+            black_s = board.pieces(black_i + 1, False)
+            for black_loc in black_s:
+                square_state[black_i + 6][7 - black_loc // 8, black_loc % 8] = 1
+        return square_state
 
     def residual_block(self, input, index):
 
@@ -144,21 +157,31 @@ class Policy_value_net():
 
     def policy_value_fn(self,board):
         legal_positions = board.generate_legal_moves()
-        current_state = np.ascontiguousarray(board)
+        current_state = np.ascontiguousarray(self.current_state().reshape(-1,12,8,8))
+        act_probs, value = self.policy_value(current_state)
+        act_probs = zip(legal_positions,act_probs[0][legal_positions])
+        return act_probs, value
+
+    def train_step(self, state_batch, mcts_probs, winner_batch, lr):
+        winner_batch = np.reshape(winner_batch, (-1, 1))
+        loss, entropy, _ = self.session.run(
+            [self.loss, self.entropy, self.optimizer],
+            feed_dict={self.input:state_batch,
+                       self.mcts_probs:mcts_probs,
+                       self.labels: winner_batch,
+                       self.learning_rate: lr})
+        return loss, entropy
+
 
     def save_model(self, model_path):
-        self.saver.save(self.)
+        self.saver.save(self.session, model_path)
+
+    def restore_model(self,model_path):
+        self.saver.restore(self.session, model_path)
 
 
 
-import chess
-import numpy as np
-square_state = np.zeros((12,8,8))
-board = chess.BaseBoard()
-s = board.pieces(1,False)
-for i in s:
-    square_state[0][7 - i // 8, i%8] = 1
-square_state[0]
+
 
 
 
