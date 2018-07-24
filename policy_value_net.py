@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
-import chess
 from run import Run
+import chess
 
 
 class Policy_value_net():
@@ -11,88 +11,95 @@ class Policy_value_net():
         board_height = 8
         self.board_width = board_width
         self.board_height = board_height
+        self.learning_rate = tf.placeholder(tf.float32, name='learning_rate')  # 0.001    #5e-3    #0.05    #
+        tf.summary.scalar('learning_rate', self.learning_rate)
+
+        self.training = tf.placeholder(tf.bool, name='training')
+        self.training = True
 
         # Define the tensorflow neural network
         # 1. Input:
         self.input_states = tf.placeholder(
-            tf.float32, shape=[None, 4, board_height, board_width])
-        self.input = tf.transpose(self.input_states, [0, 2, 3, 1])
+            tf.float32, shape=[None, 18, board_height, board_width]) # 'channels_first'
+        self.input = tf.transpose(self.input_states, [0, 2, 3, 1]) # 'channels_last'
         # 2. Common Networks Layers
+        regularizer = tf.contrib.layers.l2_regularizer(scale=0.0001)
         self.conv1 = tf.layers.conv2d(inputs=self.input,
-                                      filters=32, kernel_size=[3, 3],
-                                      padding="same", data_format="channels_last",
-                                      activation=tf.nn.relu)
-        self.conv2 = tf.layers.conv2d(inputs=self.conv1, filters=64,
-                                      kernel_size=[3, 3], padding="same",
-                                      data_format="channels_last",
-                                      activation=tf.nn.relu)
-        self.conv3 = tf.layers.conv2d(inputs=self.conv2, filters=128,
-                                      kernel_size=[3, 3], padding="same",
-                                      data_format="channels_last",
-                                      activation=tf.nn.relu)
-        # 3-1 Action Networks
-        self.action_conv = tf.layers.conv2d(inputs=self.conv3, filters=4,
-                                            kernel_size=[1, 1], padding="valid",
+                                      filters=256, kernel_size=[3, 3],
+                                      padding='SAME', data_format="channels_last",
+                                      kernel_regularizer=regularizer)
+        self.conv1 = tf.contrib.layers.batch_norm(self.conv1, center=False, epsilon=1e-5, fused=True,
+                                                  is_training=self.training)
+
+        # Residual_block
+        self.residual_layer = self.conv1
+        for i in range(19):
+            self.residual_layer = self.residual_block(self.residual_layer,i)
+
+        # Policy_head
+        self.policy_head = tf.layers.conv2d(inputs=self.residual_layer, filters=2,
+                                            kernel_size=[1, 1], padding='SAME',
                                             data_format="channels_last",
-                                            activation=tf.nn.relu)
-        # Flatten the tensor
-        self.action_conv_flat = tf.reshape(
-            self.action_conv, [-1, 4 * board_height * board_width])
-        # 3-2 Full connected layer, the output is the log probability of moves
-        # on each slot on the board
-        self.action_fc = tf.layers.dense(inputs=self.action_conv_flat,
-                                         units=board_height * board_width,
-                                         activation=tf.nn.log_softmax)
-        # 4 Evaluation Networks
-        self.evaluation_conv = tf.layers.conv2d(inputs=self.conv3, filters=2,
-                                                kernel_size=[1, 1],
-                                                padding="same",
-                                                data_format="channels_last",
-                                                activation=tf.nn.relu)
-        self.evaluation_conv_flat = tf.reshape(
-            self.evaluation_conv, [-1, 2 * board_height * board_width])
-        self.policy_out= tf.layers.dense(inputs=self.evaluation_conv_flat,
-                                              units=64, activation=tf.nn.relu)
-        # output the score of evaluation on current state
-        self.value_out = tf.layers.dense(inputs=self.policy_out,
-                                              units=1, activation=tf.nn.tanh)
+                                            kernel_regularizer=regularizer)
+        self.policy_head = tf.contrib.layers.batch_norm(self.policy_head, center=False, epsilon=1e-5,fused=True,
+                                                        is_training=self.training,activation_fn=tf.nn.relu)
+        self.policy_head = tf.reshape(self.policy_head,[-1,8*8*2])
+        self.policy_head = tf.contrib.layers.fully_connected(self.policy_head, 1968, activation_fn=None)
 
-        # Define the Loss function
-        # 1. Label: the array containing if the game wins or not for each state
-        self.labels = tf.placeholder(tf.float32, shape=[None, 1])
-        # 2. Predictions: the array containing the evaluation score of each state
-        # which is self.evaluation_fc2
-        # 3-1. Value Loss function
-        self.value_loss = tf.losses.mean_squared_error(self.labels,
-                                                       self.value_out)
-        # 3-2. Policy Loss function
-        self.mcts_probs = tf.placeholder(
-            tf.float32, shape=[None, board_height * board_width])
-        self.policy_loss = tf.negative(tf.reduce_mean(
-            tf.reduce_sum(tf.multiply(self.mcts_probs, self.action_fc), 1)))
-        # 3-3. L2 penalty (regularization)
-        l2_penalty_beta = 1e-4
-        vars = tf.trainable_variables()
-        l2_penalty = l2_penalty_beta * tf.add_n(
-            [tf.nn.l2_loss(v) for v in vars if 'bias' not in v.name.lower()])
-        # 3-4 Add up to be the Loss function
-        self.loss = self.value_loss + self.policy_loss + l2_penalty
 
-        # Define the optimizer we use for training
-        self.learning_rate = tf.placeholder(tf.float32)
-        self.optimizer = tf.train.AdamOptimizer(
-            learning_rate=self.learning_rate).minimize(self.loss)
+        # Value_head
+        self.value_head = tf.layers.conv2d(self.residual_layer,filters=1,kernel_size=[1,1],
+                                           padding='SAME', kernel_regularizer=regularizer)
+        self.value_head = tf.contrib.layers.batch_norm(self.value_head, center=False, epsilon=1e-5, fused=True,
+                                                       is_training=self.training, activation_fn=tf.nn.relu)
+        self.value_head = tf.reshape(self.value_head, [-1, 8 * 8 * 1])
+        self.value_head = tf.contrib.layers.fully_connected(self.value_head, 256,
+                                                            activation_fn=tf.nn.relu)
+        self.value_head = tf.contrib.layers.fully_connected(self.value_head, 1,
+                                                            activation_fn=tf.nn.tanh)
 
-        # Make a session
-        self.session = tf.Session()
+
+        # Define loss function
+        self.pi_ = tf.placeholder(tf.float32, [None, 1968], name='pi')
+        self.policy_loss = tf.nn.softmax_cross_entropy_with_logits(labels=self.pi_, logits=self.policy_head)
+        self.policy_loss = tf.reduce_mean(self.policy_loss)
+
+        self.z_ = tf.placeholder(tf.float32, [None, 1], name='z')
+        self.value_loss = tf.losses.mean_squared_error(labels=self.z_, predictions=self.value_head)
+        self.value_loss = tf.reduce_mean(self.value_loss)
+        tf.summary.scalar('mse_loss', self.value_loss)
+
+        regular_variables = tf.trainable_variables()
+        self.l2_loss = tf.contrib.layers.apply_regularization(regularizer, regular_variables)
+
+        self.loss = self.value_loss + self.policy_loss + self.l2_loss
+        tf.summary.scalar('loss', self.loss)
+
+        self.global_step = tf.Variable(0, name="global_step", trainable=False)
+
+        # Optimizer
+        self.optimizer = tf.train.MomentumOptimizer(
+            learning_rate=self.learning_rate, momentum=0.9, use_nesterov=True)
+
+        # Accuracy
+        correct_prediction = tf.equal(tf.argmax(self.policy_head, 1), tf.argmax(self.pi_, 1))
+        correct_prediction = tf.cast(correct_prediction, tf.float32)
+        self.accuracy = tf.reduce_mean(correct_prediction, name='accuracy')
+        tf.summary.scalar('move_accuracy', self.accuracy)
+
+
+        self.sess = tf.Session()
+
+        #         self.sess.run(tf.local_variables_initializer())
+        #         self.sess.run(tf.initialize_all_variables())
 
         # calc policy entropy, for monitoring only
         self.entropy = tf.negative(tf.reduce_mean(
-            tf.reduce_sum(tf.exp(self.action_fc) * self.action_fc, 1)))
+            tf.reduce_sum(tf.exp(self.policy_head) * self.policy_head, 1)))
 
         # Initialize variables
         init = tf.global_variables_initializer()
-        self.session.run(init)
+        self.sess.run(init)
 
         # For saving and restoring
         self.saver = tf.train.Saver()
@@ -102,35 +109,40 @@ class Policy_value_net():
 
 
     def residual_block(self, input, index):
+        regularizer = tf.contrib.layers.l2_regularizer(scale=0.0001)
+        res_name = "res" + str(index)
+        orig = tf.identity(input)
+        residual_layer = tf.layers.conv2d(inputs=input,
+                                          filters=256,
+                                          kernel_size=3,
+                                          padding='SAME',
+                                          data_format='channels_last',
+                                          use_bias=False,
+                                          kernel_regularizer=regularizer,
+                                          name=res_name+"_conv1-"+str(3)+"-"+str(256),
+                                          activation=tf.nn.relu)
+        residual_layer = tf.contrib.layers.batch_norm(residual_layer, center=False, epsilon=1e-5, fused=True,
+                                             is_training=self.training, activation_fn=tf.nn.relu)
 
-        res_name = "res" + index
-        x = tf.layers.conv2d(inputs=input,
-                             filters=256,
-                             kernel_size=3,
-                             padding="same",
-                             data_format="channels_first",
-                             use_bias=False,
-                             kernel_regularize=12*(1e-4),
-                             name=res_name+"_conv1-"+str(3)+"-"+str(256),
-                             activation=tf.nn.relu
-                             )
-        x = tf.layers.BatchNormalization(axis=1, name=res_name + "_batchnorm1")(x)
-        x = tf.keras.layers.Activation("relu", name=res_name + "_relu1")(x)
-        x = tf.layers.Conv2D(filters=256, kernel_size=3, padding="same",
-                   data_format="channels_first", use_bias=False, kernel_regularizer=12*(1e-4),
-                   name=res_name + "_conv2-" + str(3) + "-" + str(256))(x)
-        x = tf.layers.BatchNormalization(axis=1, name="res" + str(index) + "_batchnorm2")(x)
-        x = tf.keras.layers.Add(name=res_name + "_add")([self.input, x])
-        x = tf.keras.layers.Activation("relu", name=res_name + "_relu2")(x)
+        residual_layer = tf.layers.conv2d(inputs=residual_layer,
+                                          filters=256, kernel_size=3, padding='SAME',
+                                          data_format='channels_last', use_bias=False,
+                                          kernel_regularizer=regularizer,
+                                          name=res_name + "_conv2-" + str(3) + "-" + str(256))
+        residual_layer = tf.contrib.layers.batch_norm(inputs=residual_layer, center=False,
+                                                      epsilon=1e-5, fused=True,
+                                                      is_training=self.training)
+        output = tf.nn.relu(tf.add(orig,residual_layer))
 
-        return x
+        return output
 
     def policy_value(self, state_batch):
-        log_act_probs,value = self.session.run(
-            [self.policy_out,self.value_out],
+        log_act_probs,value = self.sess.run(
+            [self.policy_head,self.value_head],
             feed_dict={self.input_states:state_batch}
         )
         act_probs = np.exp(log_act_probs)
+        print('value',value)
         return act_probs, value
 
     def policy_value_fn(self,board):
@@ -138,28 +150,73 @@ class Policy_value_net():
         legal_positions = []
         for i in list(board.generate_legal_moves()):
             legal_positions.append(i.uci())
-        current_state = np.ascontiguousarray(run_game.current_state().reshape(-1,4,8,8))
+        current_state = np.ascontiguousarray(self.current_state().reshape(-1,18,8,8))
         act_probs, value = self.policy_value(current_state)
         act_probs = zip(legal_positions, act_probs[0])
-
+        print('act_probs,value', list(act_probs), value)
         return act_probs, value
 
-    def train_step(self, state_batch, mcts_probs, winner_batch, lr):
-        winner_batch = np.reshape(winner_batch, (-1, 1))
-        loss, entropy, _ = self.session.run(
+    def alg_to_coord(alg):
+        rank = 8 - int(alg[1])  # 0-7
+        file = ord(alg[0]) - ord('a')  # 0-7
+        return rank, file
+
+    def current_state(self):
+        square_state = np.zeros((12, 8, 8))
+        chess_board = chess.Board()
+        foo = chess_board.fen().split(' ')
+
+        en_passant = np.zeros((8, 8), dtype=np.float32)
+
+        if foo[3] != '-':
+            eps = self.alg_to_coord(foo[3])
+            en_passant[eps[0]][eps[1]] = 1
+
+        fifty_move_count = int(foo[4])
+        fifty_move = np.full((8, 8), fifty_move_count, dtype=np.float32)
+
+        castling = foo[2]
+        auxiliary_planes = [np.full((8, 8), int('K' in castling), dtype=np.float32),
+                            np.full((8, 8), int('Q' in castling), dtype=np.float32),
+                            np.full((8, 8), int('k' in castling), dtype=np.float32),
+                            np.full((8, 8), int('q' in castling), dtype=np.float32),
+                            fifty_move,
+                            en_passant]
+        ret = np.array(auxiliary_planes, dtype=np.float32)
+        assert ret.shape == (6, 8, 8)
+
+        board = chess.BaseBoard()
+        for i in range(6):
+            s = board.pieces(i + 1, True)
+            for white_loc in s:
+                square_state[i][7 - white_loc // 8, white_loc % 8] = 1
+
+        for black_i in range(6):
+            black_s = board.pieces(black_i + 1, False)
+            for black_loc in black_s:
+                square_state[black_i + 6][7 - black_loc // 8, black_loc % 8] = 1
+
+        square_state = np.array(square_state, dtype=np.float32)
+        state = np.vstack([square_state,ret])
+        return state
+
+    def train_step(self, positions, probs, winners, learning_rate):
+        winners = np.reshape(winners, (-1, 1))
+        loss, entropy, _ = self.sess.run(
             [self.loss, self.entropy, self.optimizer],
-            feed_dict={self.input:state_batch,
-                       self.mcts_probs:mcts_probs,
-                       self.labels: winner_batch,
-                       self.learning_rate: lr})
+            feed_dict={self.input:positions,
+                       self.pi_:probs,
+                       self.z_: winners,
+                       self.learning_rate: learning_rate,
+                       self.training: True})
         return loss, entropy
 
 
     def save_model(self, model_path):
-        self.saver.save(self.session, model_path)
+        self.saver.save(self.sess, model_path)
 
     def restore_model(self,model_path):
-        self.saver.restore(self.session, model_path)
+        self.saver.restore(self.sess, model_path)
 
 
 
