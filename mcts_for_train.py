@@ -39,6 +39,11 @@ class TreeNode(object):
         for action, prob in action_priors:
             if action not in self._children:
                 self._children[action] = TreeNode(self, prob)
+                # print(list(self._children.items()))
+                # print(action,prob)
+                board = chess.Board()
+                #print(list(board.generate_legal_moves()))
+                #print(board.turn)
 
     def select(self, c_puct):
         """Select action among children that gives maximum action value Q
@@ -49,12 +54,14 @@ class TreeNode(object):
         #print('self._children.items()', list(self._children.items())[0][1].get_value(c_puct))
         select_max = list(self._children.items())[0]
         for i in range(len(list(self._children.items()))):
-            print(list(self._children.items())[i][1].get_value(c_puct),list(self._children.items())[i][0],i)
+            #print(list(self._children.items())[i][1].get_value(c_puct), list(self._children.items())[i], i, self._Q)
             if select_max[1].get_value(c_puct) < list(self._children.items())[i][1].get_value(c_puct):
                 select_max = list(self._children.items())[i]
 
         # print(max(list(self._children.items()),
         #            key=lambda act_node: act_node[1].get_value(c_puct).any()))
+        #print(select_max)
+
         return select_max
 
     def update(self, leaf_value):
@@ -66,6 +73,8 @@ class TreeNode(object):
         self._n_visits += 1
         # Update Q, a running average of values for all visits.
         self._Q += 1.0*(leaf_value - self._Q) / self._n_visits
+        #print(leaf_value)
+        #print('self._q',self._Q)
 
     def update_recursive(self, leaf_value):
         """Like a call to update(), but applied recursively for all ancestors.
@@ -84,6 +93,8 @@ class TreeNode(object):
         """
         self._u = (c_puct * self._P *
                    np.sqrt(self._parent._n_visits) / (1 + self._n_visits))
+
+        #print('self._Q + self._u',self._Q + self._u,self._Q , self._u)
         return self._Q + self._u
 
     def is_leaf(self):
@@ -119,14 +130,20 @@ class MCTS(object):
         State is modified in-place, so a copy must be provided.
         """
         node = self._root
+        i = 0
         while(1):
             if node.is_leaf():
 
                 break
             # Greedily select next move.
             action, node = node.select(self._c_puct)
+            i += 1
+            #print('select time',i)
             action = chess.Move.from_uci(action)
-            state.push(action)
+            #board = chess.Board()
+            #print('turn',board.turn)
+            #print('action',action)
+            state.push(chess.Move.from_uci(str(action)))
 
         action_probs, leaf_value = self._policy(state)
         # Check for end of game
