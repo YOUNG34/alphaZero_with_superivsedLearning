@@ -15,7 +15,7 @@ class Policy_value_net():
         tf.summary.scalar('learning_rate', self.learning_rate)
 
         self.training = tf.placeholder(tf.bool, name='training')
-        self.training = True
+        #self.training = True
 
         # Define the tensorflow neural network
         # 1. Input:
@@ -138,11 +138,12 @@ class Policy_value_net():
 
     def policy_value(self, state_batch):
         log_act_probs,value = self.sess.run(
-            [self.policy_head,self.value_head],
-            feed_dict={self.input_states:state_batch}
+            [self.policy_head, self.value_head],
+            feed_dict={self.input_states:state_batch,
+                       self.training:False}
         )
         act_probs = np.exp(log_act_probs)
-        print('value',value)
+        #print('value',value)
         return act_probs, value
 
     def policy_value_fn(self,board):
@@ -150,61 +151,23 @@ class Policy_value_net():
         legal_positions = []
         for i in list(board.generate_legal_moves()):
             legal_positions.append(i.uci())
-        current_state = np.ascontiguousarray(self.current_state().reshape(-1,18,8,8))
+        current_state = np.ascontiguousarray(run_game.current_state().reshape(-1,18,8,8))
+        #current_state = run_game.current_state()
+        #print(current_state)
         act_probs, value = self.policy_value(current_state)
         act_probs = zip(legal_positions, act_probs[0])
-        print('act_probs,value', list(act_probs), value)
+        #print('act_probs,value', list(act_probs), value)
         return act_probs, value
 
-    def alg_to_coord(alg):
-        rank = 8 - int(alg[1])  # 0-7
-        file = ord(alg[0]) - ord('a')  # 0-7
-        return rank, file
 
-    def current_state(self):
-        square_state = np.zeros((12, 8, 8))
-        chess_board = chess.Board()
-        foo = chess_board.fen().split(' ')
 
-        en_passant = np.zeros((8, 8), dtype=np.float32)
 
-        if foo[3] != '-':
-            eps = self.alg_to_coord(foo[3])
-            en_passant[eps[0]][eps[1]] = 1
-
-        fifty_move_count = int(foo[4])
-        fifty_move = np.full((8, 8), fifty_move_count, dtype=np.float32)
-
-        castling = foo[2]
-        auxiliary_planes = [np.full((8, 8), int('K' in castling), dtype=np.float32),
-                            np.full((8, 8), int('Q' in castling), dtype=np.float32),
-                            np.full((8, 8), int('k' in castling), dtype=np.float32),
-                            np.full((8, 8), int('q' in castling), dtype=np.float32),
-                            fifty_move,
-                            en_passant]
-        ret = np.array(auxiliary_planes, dtype=np.float32)
-        assert ret.shape == (6, 8, 8)
-
-        board = chess.BaseBoard()
-        for i in range(6):
-            s = board.pieces(i + 1, True)
-            for white_loc in s:
-                square_state[i][7 - white_loc // 8, white_loc % 8] = 1
-
-        for black_i in range(6):
-            black_s = board.pieces(black_i + 1, False)
-            for black_loc in black_s:
-                square_state[black_i + 6][7 - black_loc // 8, black_loc % 8] = 1
-
-        square_state = np.array(square_state, dtype=np.float32)
-        state = np.vstack([square_state,ret])
-        return state
 
     def train_step(self, positions, probs, winners, learning_rate):
         winners = np.reshape(winners, (-1, 1))
         loss, entropy, _ = self.sess.run(
             [self.loss, self.entropy, self.optimizer],
-            feed_dict={self.input:positions,
+            feed_dict={self.input_states:positions,
                        self.pi_:probs,
                        self.z_: winners,
                        self.learning_rate: learning_rate,
@@ -217,14 +180,4 @@ class Policy_value_net():
 
     def restore_model(self,model_path):
         self.saver.restore(self.sess, model_path)
-
-
-
-
-
-
-
-
-
-
 
