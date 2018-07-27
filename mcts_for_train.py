@@ -52,17 +52,19 @@ class TreeNode(object):
         """
         #print('self._children.items()',self._children.items())
         #print('self._children.items()', list(self._children.items())[0][1].get_value(c_puct))
-        select_max = list(self._children.items())[0]
-        for i in range(len(list(self._children.items()))):
-            #print(list(self._children.items())[i][1].get_value(c_puct), list(self._children.items())[i], i, self._Q)
-            if select_max[1].get_value(c_puct) < list(self._children.items())[i][1].get_value(c_puct):
-                select_max = list(self._children.items())[i]
+        # select_max = list(self._children.items())[0]
+        # for i in range(len(list(self._children.items()))):
+        #     #print(list(self._children.items())[i][1].get_value(c_puct), list(self._children.items())[i], i, self._Q)
+        #     if select_max[1].get_value(c_puct) < list(self._children.items())[i][1].get_value(c_puct):
+        #         select_max = list(self._children.items())[i]
 
         # print(max(list(self._children.items()),
         #            key=lambda act_node: act_node[1].get_value(c_puct).any()))
         #print(select_max)
 
-        return select_max
+        #return select_max
+        return max(self._children.items(),
+                   key=lambda act_node: act_node[1].get_value(c_puct))
 
     def update(self, leaf_value):
         """Update node values from leaf evaluation.
@@ -132,24 +134,25 @@ class MCTS(object):
         node = self._root
         i = 0
         while(1):
+
             if node.is_leaf():
 
                 break
             # Greedily select next move.
+
             action, node = node.select(self._c_puct)
-            i += 1
-            #print('select time',i)
-            action = chess.Move.from_uci(action)
-            #board = chess.Board()
-            #print('turn',board.turn)
-            #print('action',action)
-            state.push(chess.Move.from_uci(str(action)))
+            board = chess.Board()
+            #print('qian',board.turn)
+            board.push(chess.Move.from_uci(action))
+            #print('hou',board.turn)
 
         action_probs, leaf_value = self._policy(state)
+        #print(action)
         # Check for end of game
         end = state.is_variant_end()
         if not end:
             node.expand(action_probs)
+
         else:
             if state.result(claim_draw = True) != '*':
                 result = state.result(claim_draw = True)
@@ -211,10 +214,12 @@ class MCTSPlayer(object):
 
     def get_action(self, board, temp=1e-3, return_prob=0):
         sensible_moves = board.generate_legal_moves()
-        move_probs = np.zeros(8*8)
+        move_probs = []#np.zeros(8*8)
         if len(list(sensible_moves)) > 0:
             acts, probs = self.mcts.get_move_probs(board, temp)
-            move_probs[list(acts)] = probs
+            #print(list(acts))
+            move_probs = list(zip(acts, probs))
+            #print(move_probs)
             if self.is_selfplay:
                 move = np.random.choice(
                     acts,
