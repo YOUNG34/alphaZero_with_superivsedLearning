@@ -25,6 +25,7 @@ class Settings(object):
 class Run(object):
     def __init__(self):
         self.players = [1,2]
+        self.move_uci = []
 
     def start_self_play(self, player, temp=1e-3):
         """ start a self-play game using a MCTS player, reuse the search tree,
@@ -88,20 +89,34 @@ class Run(object):
             move, move_probs = player.get_action(board,
                                                  temp=temp,
                                                  return_prob=1)
+            if move not in self.move_uci:
+                self.move_uci.append(move)
+            print(self.move_uci)
+
             # store the data
             states.append(self.current_state())
 
-            probs = np.zeros(1968)
-            labels_array = self.creat
-            label2i = {val: i for i, val in enumerate(labels_array)}
-            mcts_probs.append(move_probs)
+            prob = np.zeros(1968)
+            #labels_array = self.create_uci_labels()
+            #label2i = {val: i for i, val in enumerate(labels_array)}
+            # print(len(move_probs[0][0]))
+            # print(move_probs)
+            # print(move_probs[0][0])
+            # for i in range(len(move_probs)):
+            #     uci_move = move_probs[i][0]
+            #     position = label2i[uci_move]
+            #     print('position',position)
+            #     prob[position] = move_probs[i][1]
+
+
+            mcts_probs.append(prob)
             current_players.append(1 if board.turn == True else 2)
-            print('np.array(states).shape',np.array(states).shape)
-            print('mcts_probs',len(mcts_probs))#
-            print('current_players',len(current_players))
-            print('move',move)
-            print(board.turn)
-            print(" ************************")
+            # print('np.array(states).shape',np.array(states).shape)
+            # print('mcts_probs',len(mcts_probs))#
+            # print('current_players',len(current_players))
+            # print('move',move)
+            # print(board.turn)
+            # print(" ************************")
 
             # perform a move
             board.push(chess.Move.from_uci(move))
@@ -157,6 +172,14 @@ class Run(object):
                     return -1
 
                 return winner
+
+
+    def create_all_uci_labels(self):
+        labels_array = []
+        letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+        numbers = ['0', '1', '2', '3', '4', '5', '6', '7', '8']
+
+        #queens_labels
 
 
 
