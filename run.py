@@ -91,22 +91,22 @@ class Run(object):
                                                  return_prob=1)
             if move not in self.move_uci:
                 self.move_uci.append(move)
-            print(self.move_uci)
+            #print(self.move_uci)
 
             # store the data
             states.append(self.current_state())
-
-            prob = np.zeros(1968)
-            #labels_array = self.create_uci_labels()
-            #label2i = {val: i for i, val in enumerate(labels_array)}
+            labels_array = self.create_all_uci_labels()
+            prob = np.zeros(len(labels_array))
+            #print(len(labels_array))
+            label2i = {val: i for i, val in enumerate(labels_array)}
             # print(len(move_probs[0][0]))
             # print(move_probs)
             # print(move_probs[0][0])
-            # for i in range(len(move_probs)):
-            #     uci_move = move_probs[i][0]
-            #     position = label2i[uci_move]
-            #     print('position',position)
-            #     prob[position] = move_probs[i][1]
+            for i in range(len(move_probs)):
+                uci_move = move_probs[i][0]
+                position = label2i[uci_move]
+                #print('position',position)
+                prob[position] = move_probs[i][1]
 
 
             mcts_probs.append(prob)
@@ -114,7 +114,7 @@ class Run(object):
             # print('np.array(states).shape',np.array(states).shape)
             # print('mcts_probs',len(mcts_probs))#
             # print('current_players',len(current_players))
-            # print('move',move)
+            #print('move',move)
             # print(board.turn)
             # print(" ************************")
 
@@ -177,22 +177,49 @@ class Run(object):
     def create_all_uci_labels(self):
         labels_array = []
         letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
-        numbers = ['0', '1', '2', '3', '4', '5', '6', '7', '8']
-        labels_array = []
-        letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
         numbers = ['1', '2', '3', '4', '5', '6', '7', '8']
-        direction_for_queen = [(0,1),(-1,1),(-1,0),(-1,-1),(0,-1),(1,-1),(1,0),(1,1)]
+        direction_for_queen_and_king = [(0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1), (1, 0), (1, 1)]
+        direction_for_knight = [(-2, -1), (-1, -2), (-2, 1), (1, -2), (2, -1), (-1, 2), (2, 1), (1, 2)]
+
         for l1 in range(8):
             for n1 in range(8):
                 for d in range(8):
-                    while True:
-                        (l2,n2) = (l1 + direction_for_queen[d][0] ,n1 + direction_for_queen[d][1])
-                        move = letters[l1]+numbers[n1]+letters[l2]+numbers[n2]
-                        labels_array.append(move)
-                        if l2 == 8 or n2 == 8 or l2 == 0 or n2 == 0:
-                            break
-        print(labels_array)
-        #queens_labels
+                    for i in range(8):
+                        (l2, n2) = (l1 + direction_for_queen_and_king[d][0] * i, n1 + direction_for_queen_and_king[d][1] * i)
+                        (l3, n3) = (l1 + direction_for_knight[d][0] * i, n1 + direction_for_knight[d][1] * i)
+                        if l2 in range(8) and n2 in range(8):
+                            move = letters[l1] + numbers[n1] + letters[l2] + numbers[n2]
+                            labels_array.append(move)
+                        if l3 in range(8) and n3 in range(8):
+                            move = letters[l1] + numbers[n1] + letters[l3] + numbers[n3]
+                            labels_array.append(move)
+        pawn = ['a2a3','a2a4','b2b3','b2b4','c2c3','c2c4','d2d3','d2d4','e2e3','e2e4','f2f3','f2f4','g2g3','g2g4',
+                'h2h3','h2h4','a7a6','a7a5','b7b6','b7b5','c7c6','c7c5','d7d6','d7d5','e7e6','e7e5','f7f6','f7f5',
+                'g7g6','g7g5','h7h6','h7h5',
+                'a7a8n','a7a8b','a7a8r','a7a8q','a7b8n','a7b8b','a7b8r','a7b8q',
+                'b7a8n','b7a8b','b7a8r','b7a8q','b7b8n','b7b8b','b7b8r','b7b8q','b7c8n','b7c8b','b7c8r','b7c8q'
+                ,'c7b8n','c7b8b','c7b8r','c7b8q','c7c8n','c7c8b','c7c8r','c7c8q','c7d8n','c7d8b','c7d8r','c7d8q'
+                ,'d7c8n','d7c8b','d7c8r','d7c8q','d7d8n','d7d8b','d7d8r','d7d8q','d7e8n','d7e8b','d7e8r','d7e8q'
+                ,'e7d8n','e7e8n','d7f8n','e7d8b','e7e8b','d7f8b','e7d8r','e7e8r','d7f8r','e7d8q','e7e8q','d7f8q'
+                ,'f7e8n','f7f8n','f7g8n','f7e8b','f7f8b','f7g8b','f7e8r','f7f8r','f7g8r','f7e8q','f7f8q','f7g8q'
+                ,'g7f8n','g7g8n','g7h8n','g7f8b','g7g8b','g7h8b','g7f8r','g7g8r','g7h8r','g7f8q','g7g8q','g7h8q'
+                ,'h7g8n','h7h8n','h7g8b','h7h8b','h7g8r','h7h8r','h7g8q','h7h8q'
+                ,'a2a1n','a2b1n','a2a1b','a2b1b','a2a1r','a2b1r','a2a1q','a2b1q'
+                ,'b2a1n','b2b1n','b2c1n','b2a1b','b2b1b','b2c1b','b2a1r','b2b1r','b2c1r','b2a1q','b2b1q','b2c1q'
+                ,'c2b1n','c2c1n','c2d1n','c2b1b','c2c1b','c2d1b','c2b1r','c2c1r','c2d1r','c2b1q','c2c1q','c2d1q'
+                ,'d2c1n','d2d1n','d2e1n','d2c1b','d2d1b','d2e1b','d2c1r','d2d1r','d2e1r','d2c1q','d2d1q','d2e1q'
+                ,'e2d1n','e2e1n','e2f1n','e2d1b','e2e1b','e2f1b','e2d1r','e2e1r','e2f1r','e2d1q','e2e1q','e2f1q'
+                ,'f2e1n','f2f1n','f2g1n','f2e1b','f2f1b','f2g1b','f2e1r','f2f1r','f2g1r','f2e1q','f2f1q','f2g1q'
+                ,'g2f1n','g2g1n','g2h1n','g2f1b','g2g1b','g2h1b','g2f1r','g2g1r','g2h1r','g2f1q','g2g1q','g2h1q'
+                ,'h2g1n','h2h1n','h2g1b','h2h1b','h2g1r','h2h1r','h2g1q','h2h1q',
+                'e1g1','e1c1','e8c8','e8g8'
+                ]
+
+        for i in range(len(pawn)):
+            labels_array.append(pawn[i])
+
+        return labels_array
+
 
 
 
