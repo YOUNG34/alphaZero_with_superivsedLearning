@@ -54,13 +54,13 @@ class Train():
     def policy_update(self):
        # assert self.data_buffer.reshape() == (None,18,8,8)
         mini_batch = self.data_buffer #random.sample(self.data_buffer, self.batch_size)
-        print(np.array(mini_batch).shape)
+        #print(np.array(mini_batch).shape)
         state_batch = np.array([data[0] for data in mini_batch])
 
         mcts_probs_batch = [data[1] for data in mini_batch]
         winner_batch = [data[2] for data in mini_batch]
         old_probs, old_v = self.policy_value_net.policy_value(state_batch)
-        print('print(state_batch)',state_batch)
+        #print('print(state_batch)',state_batch)
         #print('mcts_probs_batch,',mcts_probs_batch)
         #print('winner_batch',winner_batch)
         #print('old_probs, old_v', old_probs, old_v)
@@ -73,12 +73,12 @@ class Train():
                     self.learn_rate*self.lr_multiplier)
 
             new_probs, new_v = self.policy_value_net.policy_value(state_batch)
-            print('new_probs, new_v',new_probs, new_v)
+            #print('new_probs, new_v',new_probs, new_v)
             kl = np.mean(np.sum(old_probs * (
                     np.log(old_probs + 1e-10) - np.log(new_probs + 1e-10)),
                     axis=1)
             )
-            print('kl',kl)
+            #print('kl',kl)
             if kl > self.kl_targ * 4:  # early stopping if D_KL diverges badly
                 break
         # adaptively adjust the learning rate
@@ -87,7 +87,7 @@ class Train():
         elif kl < self.kl_targ / 2 and self.lr_multiplier < 10:
             self.lr_multiplier *= 1.5
 
-        print('self.lr_multiplier',self.lr_multiplier)
+        #print('self.lr_multiplier',self.lr_multiplier)
         explained_var_old = (1 -
                              np.var(np.array(winner_batch) - old_v.flatten()) /
                              np.var(np.array(winner_batch)))
@@ -138,26 +138,26 @@ class Train():
                 self.collect_selfplay_data(self.play_batch_size)
                 print("batch i:{}, episode_len:{}, result:{}".format(
                     i + 1, self.episode_len, self.result))
-                # if len(self.data_buffer) > self.batch_size:
-                #     loss, entropy = self.policy_update()
-                #
-                # # check the performance of the current model,
-                # # and save the model params
-                #
-                # if (i + 1) % self.check_freq == 0:
-                #     print("current self-play batch: {}".format(i + 1))
-                #     win_ratio = self.policy_evaluate()
-                #     print('win_ratio',win_ratio)
-                #     self.policy_value_net.save_model('./current_policy.model')
-                #     if win_ratio > self.best_win_ratio:
-                #         print("New best policy!!!!!!!!")
-                #         self.best_win_ratio = win_ratio
-                #         # update the best_policy
-                #         self.policy_value_net.save_model('./best_policy.model')
-                #         if (self.best_win_ratio == 1.0 and
-                #                 self.mcts_num < 5000):
-                #             self.mcts_num += 1000
-                #             self.best_win_ratio = 0.0
+                if len(self.data_buffer) > self.batch_size:
+                    loss, entropy = self.policy_update()
+
+                # check the performance of the current model,
+                # and save the model params
+
+                if (i + 1) % self.check_freq == 0:
+                    print("current self-play batch: {}".format(i + 1))
+                    win_ratio = self.policy_evaluate()
+                    print('win_ratio',win_ratio)
+                    self.policy_value_net.save_model('./current_policy.model')
+                    if win_ratio > self.best_win_ratio:
+                        print("New best policy!!!!!!!!")
+                        self.best_win_ratio = win_ratio
+                        # update the best_policy
+                        self.policy_value_net.save_model('./best_policy.model')
+                        if (self.best_win_ratio == 1.0 and
+                                self.mcts_num < 5000):
+                            self.mcts_num += 1000
+                            self.best_win_ratio = 0.0
         except KeyboardInterrupt:
             print('\n\rquit')
 
