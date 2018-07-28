@@ -178,7 +178,20 @@ class Run(object):
         labels_array = []
         letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
         numbers = ['0', '1', '2', '3', '4', '5', '6', '7', '8']
-
+        labels_array = []
+        letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+        numbers = ['1', '2', '3', '4', '5', '6', '7', '8']
+        direction_for_queen = [(0,1),(-1,1),(-1,0),(-1,-1),(0,-1),(1,-1),(1,0),(1,1)]
+        for l1 in range(8):
+            for n1 in range(8):
+                for d in range(8):
+                    while True:
+                        (l2,n2) = (l1 + direction_for_queen[d][0] ,n1 + direction_for_queen[d][1])
+                        move = letters[l1]+numbers[n1]+letters[l2]+numbers[n2]
+                        labels_array.append(move)
+                        if l2 == 8 or n2 == 8 or l2 == 0 or n2 == 0:
+                            break
+        print(labels_array)
         #queens_labels
 
 
