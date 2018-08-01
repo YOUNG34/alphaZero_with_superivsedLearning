@@ -4,6 +4,13 @@ import pygame
 from pygame.locals import *
 import chess.svg
 
+import os
+import chess.pgn
+from time import time
+import json
+import collections
+from collections import OrderedDict
+
 
 class Settings(object):
     """docstring for Settings"""
@@ -32,7 +39,6 @@ class Run(object):
         and store the self-play data: (state, mcts_probs, z) for training
         """
         board = chess.Board()
-        states, mcts_probs, current_players = [], [], []
 
         # #move_stack = ""
         # board = chess.Board()
@@ -89,8 +95,7 @@ class Run(object):
             move, move_probs = player.get_action(board,
                                                  temp=temp,
                                                  return_prob=1)
-            if move not in self.move_uci:
-                self.move_uci.append(move)
+
             #print(self.move_uci)
 
             # store the data
@@ -111,12 +116,6 @@ class Run(object):
 
             mcts_probs.append(prob)
             current_players.append(1 if board.turn == True else 2)
-            # print('np.array(states).shape',np.array(states).shape)
-            # print('mcts_probs',len(mcts_probs))#
-            # print('current_players',len(current_players))
-            #print('move',move)
-            # print(board.turn)
-            # print(" ************************")
 
             # perform a move
             board.push(chess.Move.from_uci(move))
@@ -222,12 +221,11 @@ class Run(object):
 
 
 
-
-
     def alg_to_coord(alg):
         rank = 8 - int(alg[1])  # 0-7
         file = ord(alg[0]) - ord('a')  # 0-7
         return rank, file
+
 
     def current_state(self):
         square_state = np.zeros((12, 8, 8))
@@ -278,25 +276,116 @@ class Run(object):
         # print("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&")
         return state
 
-    # def self_play(self):
-    #     mcts_player = mcts_pure(c_puct=5, n_playout=100)
-    #     board = chess.Board()
-    #     while True:
-    #         if board.turn == True:
-    #             move = input("Please input your move:")
-    #             if chess.Move.from_uci(move) not in board.legal_moves:
-    #                 print("Invalid move!")
-    #                 continue
-    #             board.push(chess.Move.from_uci(move))
-    #             print(board)
-    #             print("**********************************")
-    #         else:
-    #             move = mcts_player.get_action(board)
-    #             board.push(chess.Move.from_uci(str(move)))
-    #             print(board)
-    #             print("**********************************")
-    #         if board.is_variant_end():
-    #             if board.turn:
-    #                 print("winner is : White side")
-    #             else:
-    #                 print("winner is : Black side")
+class Supervised_learning(object):
+
+    def __init__(self):
+        self.min_elo_policy = 500
+        self.max_elo_policy = 1800
+        self.buff = []
+        run = Run()
+        self.labels = run.create_all_uci_labels()
+
+    def get_games_from_file(self):
+        file = open('/Users/zeyang/Desktop/alphaGoTest-master/supervised_learning_data/ficsgamesdb_201801_chess_nomovetimes_10994.pgn'
+                    , errors='ignore')
+
+        games = [[]]*51
+
+        for i in range(len(games)):
+            games[i] = chess.pgn.read_game(file)
+
+        return games
+
+    def clip_elo_policy(self, elo):
+        return min(1, max(0, elo - self.min_elo_policy) / self.max_elo_policy)
+
+    def get_data(self,game):
+        result = game.headers["Result"]
+        white_elo, black_elo = int(game.headers["WhiteElo"]),\
+                               int(game.headers["BlackElo"])
+        white_weight = self.clip_elo_policy(white_elo)
+        black_weight = self.clip_elo_policy(black_elo)
+
+        moves = []
+        i = 0
+        while not game.is_end():
+
+            game = game.variation(0)
+            moves.append(game.move.uci())
+            i += 1
+        moves.append([result,white_weight,black_weight])
+
+        return moves
+
+    def save_data(self, moves,id):
+        self.file_name = '/Users/zeyang/Desktop/alphaGoTest-master/move_json_files/move'+id+'.json'
+        #print(moves)
+        # moves = np.array(moves)
+        # np.savetxt('/Users/zeyang/Desktop/alphaGoTest-master/moves.txt',moves)
+        # with open(file_name, 'a') as f:
+        #     f.write(str(moves))
+        with open(self.file_name, "w") as f:
+            json.dump(moves, f)
+
+    def prepare(self):
+        games = self.get_games_from_file()
+        i = 0
+        for game in games:
+            i += 1
+            a = self.get_data(game)
+            # for i in range(len(a)):
+            # print(a)
+            self.save_data(a, str(i))
+
+    def supervised_learning_run(self,index):
+        print('read file:',index)
+        run = Run()
+        board = chess.Board()
+        with open('/Users/zeyang/Desktop/alphaGoTest-master/move_json_files/move'+str(index)+'.json', "rt") as f:
+            self.buff = json.load(f)
+            result = self.buff[-1][0]
+            white_weight = self.buff[-1][1]
+            black_weight = self.buff[-1][2]
+            result_real = 0
+            states, mcts_probs, current_players = [], [], []
+
+            for j in range(len(self.buff)-1):
+
+                move = self.buff[j] #结尾记得加 j += 1
+                # store the data
+                states.append(run.current_state())
+                prob = np.zeros(len(self.labels))
+
+                # print(len(labels_array))
+                label2i = {val: i for i, val in enumerate(self.labels)}
+                # print(len(move_probs[0][0]))
+                # print(move_probs)
+                # print(move_probs[0][0])
+                position = label2i[move]
+                # print('position',position)
+                if board.turn == True:
+                    prob[position] = white_weight
+                else:
+                    prob[position] = black_weight
+                mcts_probs.append(prob)
+                current_players.append(1 if board.turn == True else 2)
+
+                # perform a move
+                board.push(chess.Move.from_uci(move))
+                print("game over:",board.is_game_over(claim_draw=True))
+
+            result_real = board.result(claim_draw=True)
+            print("result",result,result_real)
+            winners_z = np.zeros(len(current_players))
+            winner = 1 if board.turn == False else 2
+            if result != '1/2-1/2':
+                winners_z[np.array(current_players) == winner] = 1.0
+                winners_z[np.array(current_players) != winner] = -1.0
+            #player.reset_player()
+            print(type(result))
+            return result, zip(states, mcts_probs, winners_z)
+
+
+
+
+
