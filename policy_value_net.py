@@ -33,7 +33,7 @@ class Policy_value_net():
 
         # Residual_block
         self.residual_layer = self.conv1
-        for i in range(19):
+        for i in range(7):
             self.residual_layer = self.residual_block(self.residual_layer,i)
 
         # Policy_head
@@ -58,34 +58,6 @@ class Policy_value_net():
         self.value_head = tf.contrib.layers.fully_connected(self.value_head, 1,
                                                             activation_fn=tf.nn.tanh)
 
-
-        # # Define loss function
-        # self.pi_ = tf.placeholder(tf.float32, [None, 3300], name='pi')
-        # self.policy_loss = tf.nn.softmax_cross_entropy_with_logits(labels=self.pi_, logits=self.policy_head)
-        # self.policy_loss = tf.reduce_mean(self.policy_loss)
-        #
-        # self.z_ = tf.placeholder(tf.float32, [None, 1], name='z')
-        # self.value_loss = tf.losses.mean_squared_error(labels=self.z_, predictions=self.value_head)
-        # self.value_loss = tf.reduce_mean(self.value_loss)
-        # tf.summary.scalar('mse_loss', self.value_loss)
-        #
-        # regular_variables = tf.trainable_variables()
-        # self.l2_loss = tf.contrib.layers.apply_regularization(regularizer, regular_variables)
-        #
-        # self.loss = self.value_loss + self.policy_loss + self.l2_loss
-        # tf.summary.scalar('loss', self.loss)
-        #
-        # self.global_step = tf.Variable(0, name="global_step", trainable=False)
-        #
-        # # Optimizer
-        # self.optimizer = tf.train.MomentumOptimizer(
-        #     learning_rate=self.learning_rate, momentum=0.9, use_nesterov=True)
-        #
-        # # Accuracy
-        # correct_prediction = tf.equal(tf.argmax(self.policy_head, 1), tf.argmax(self.pi_, 1))
-        # correct_prediction = tf.cast(correct_prediction, tf.float32)
-        # self.accuracy = tf.reduce_mean(correct_prediction, name='accuracy')
-        # tf.summary.scalar('move_accuracy', self.accuracy)
 
         # Value loss function
         self.z_ = tf.placeholder(tf.float32, [None, 1], name='z')
@@ -200,14 +172,3 @@ class Policy_value_net():
 
     def restore_model(self,model_path):
         self.saver.restore(self.sess, model_path)
-
-
-
-
-
-
-
-
-
-
-
