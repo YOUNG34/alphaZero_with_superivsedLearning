@@ -1,3 +1,4 @@
+
 from mcts_pure import MCTSPlayer as MCTS_Pure
 from mcts_for_train import MCTSPlayer
 from policy_value_net import Policy_value_net
@@ -13,6 +14,7 @@ class Train():
     def __init__(self, init_model = None):
         self.board_width = 8
         self.board_height = 8
+        self.readed_files_count = 0
 
         self.run_game = Run()
 
@@ -28,7 +30,7 @@ class Train():
         self.play_batch_size = 1
         self.epochs = 5
         self.kl_targ = 0.02
-        self.check_freq = 20
+        self.check_freq = 1
         self.game_batch_num = 1500
         self.best_win_ratio = 0.0
 
@@ -55,17 +57,13 @@ class Train():
     def policy_update(self):
        # assert self.data_buffer.reshape() == (None,18,8,8)
         mini_batch = self.data_buffer #random.sample(self.data_buffer, self.batch_size)
-        print(np.array(mini_batch).shape)
+        #print(np.array(mini_batch).shape)
         state_batch = np.array([data[0] for data in mini_batch])
 
         mcts_probs_batch = [data[1] for data in mini_batch]
         winner_batch = [data[2] for data in mini_batch]
         old_probs, old_v = self.policy_value_net.policy_value(state_batch)
-        print('print(state_batch)',state_batch)
-        #print('mcts_probs_batch,',mcts_probs_batch)
-        #print('winner_batch',winner_batch)
-        #print('old_probs, old_v', old_probs, old_v)
-        #print('self.learn_rate*self.lr_multiplier', self.learn_rate * self.lr_multiplier)
+
         for i in range(self.epochs):
             loss, entropy = self.policy_value_net.train_step(
                     state_batch,
@@ -74,12 +72,12 @@ class Train():
                     self.learn_rate*self.lr_multiplier)
 
             new_probs, new_v = self.policy_value_net.policy_value(state_batch)
-            print('new_probs, new_v',new_probs, new_v)
+            #print('new_probs, new_v',new_probs, new_v)
             kl = np.mean(np.sum(old_probs * (
                     np.log(old_probs + 1e-10) - np.log(new_probs + 1e-10)),
                     axis=1)
             )
-            print('kl',kl)
+            #print('kl',kl)
             if kl > self.kl_targ * 4:  # early stopping if D_KL diverges badly
                 break
         # adaptively adjust the learning rate
@@ -88,7 +86,7 @@ class Train():
         elif kl < self.kl_targ / 2 and self.lr_multiplier < 10:
             self.lr_multiplier *= 1.5
 
-        print('self.lr_multiplier',self.lr_multiplier)
+        #print('self.lr_multiplier',self.lr_multiplier)
         explained_var_old = (1 -
                              np.var(np.array(winner_batch) - old_v.flatten()) /
                              np.var(np.array(winner_batch)))
@@ -132,7 +130,7 @@ class Train():
             win_cnt[1], win_cnt[2], win_cnt[-1]))
         return win_ratio
 
-    def self_learning_run(self):
+    def run(self):
         """run the training pipeline"""
         try:
             for i in range(self.game_batch_num):
@@ -145,56 +143,10 @@ class Train():
                 # check the performance of the current model,
                 # and save the model params
 
-                if (i + 1) % self.check_freq == 0:
-                    print("current self-play batch: {}".format(i + 1))
-                    win_ratio = self.policy_evaluate()
-                    print('win_ratio',win_ratio)
-                    self.policy_value_net.save_model('./current_policy.model')
-                    if win_ratio > self.best_win_ratio:
-                        print("New best policy!!!!!!!!")
-                        self.best_win_ratio = win_ratio
-                        # update the best_policy
-                        self.policy_value_net.save_model('./best_policy.model')
-                        if (self.best_win_ratio == 1.0 and
-                                self.mcts_num < 5000):
-                            self.mcts_num += 1000
-                            self.best_win_ratio = 0.0
-        except KeyboardInterrupt:
-            print('\n\rquit')
-
-
-    def collect_supervised_learning_data(self,index):
-        supervised_learning = Supervised_learning()
-        supervised_learning.prepare()
-        self.result, play_data = supervised_learning.supervised_learning_run(index)
-        play_data = list(play_data)[:]
-        #print(np.array(play_data))
-        #print('play_data[0][0]',play_data[0][0])
-        self.episode_len = len(play_data)
-        self.data_buffer.extend(play_data)
-        #print(self.data_buffer)
-
-    def supervised_learning_run(self):
-        for i in range(self.game_batch_num):
-            path = '/Users/zeyang/Desktop/alphaGoTest-master/move_json_files'
-            files = os.listdir(path)
-            for j in range(1, len(files) + 1):
-                print(j)
-                self.collect_supervised_learning_data(j)
-                print("batch i:{}, episode_len:{}, result:{}".format(
-                    j , self.episode_len, self.result))
-
-
-            if len(self.data_buffer) > self.batch_size:
-                loss, entropy = self.policy_update()
-
-            # check the performance of the current model,
-            # and save the model params
-
-            if (i + 1) % self.check_freq == 0:
+                #if (i + 1) % self.check_freq == 0:
                 print("current self-play batch: {}".format(i + 1))
                 win_ratio = self.policy_evaluate()
-                print('win_ratio', win_ratio)
+                print('win_ratio',win_ratio)
                 self.policy_value_net.save_model('./current_policy.model')
                 if win_ratio > self.best_win_ratio:
                     print("New best policy!!!!!!!!")
@@ -205,6 +157,53 @@ class Train():
                             self.mcts_num < 5000):
                         self.mcts_num += 1000
                         self.best_win_ratio = 0.0
+        except KeyboardInterrupt:
+            print('\n\rquit')
+
+    def collect_supervised_learning_data(self, index):
+        supervised_learning = Supervised_learning()
+
+        self.result, play_data = supervised_learning.supervised_learning_run(index)
+        play_data = list(play_data)[:]
+
+        self.episode_len = len(play_data)
+        self.data_buffer.extend(play_data)
+        # print(self.data_buffer)
+
+    def supervised_learning_run(self):
+        supervised_learning = Supervised_learning()
+        supervised_learning.prepare()
+        for i in range(self.game_batch_num):
+            #path = '/Users/zeyang/Desktop/alphaGoTest-master/move_json_files'
+            path = '/home/k1758068/Desktop/alphaGoTest-master/move_json_files'
+            files = os.listdir(path)
+            for j in range(self.readed_files_count + 1 ,self.readed_files_count+11):
+                self.collect_supervised_learning_data(j)
+                print("batch i:{}, episode_len:{}, result:{}".format(
+                    j, self.episode_len, self.result))
+            self.readed_files_count += 10
+            if len(self.data_buffer) > self.batch_size:
+                loss, entropy = self.policy_update()
+
+            # check the performance of the current model,
+            # and save the model params
+
+            if (i + 1) % self.check_freq == 0:
+                print("current self-play batch: {}".format(i + 1))
+                #win_ratio = self.policy_evaluate()
+                #print('win_ratio', win_ratio)
+                self.policy_value_net.save_model('./current_policy.model')
+                self.data_buffer = []
+                # if win_ratio > self.best_win_ratio:
+                #     print("New best policy!!!!!!!!")
+                #     self.best_win_ratio = win_ratio
+                #     # update the best_policy
+                #     self.policy_value_net.save_model('./best_policy.model')
+                #     if (self.best_win_ratio == 1.0 and
+                #             self.mcts_num < 5000):
+                #         self.mcts_num += 1000
+                #         self.best_win_ratio = 0.0
+
 if __name__ == '__main__':
     training = Train()
     training.supervised_learning_run()
