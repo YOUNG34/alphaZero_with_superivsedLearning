@@ -68,6 +68,7 @@ class GUI(object):
         background_color = (230,230,230)
         image_path = '/home/k1758068/Desktop/alphaGoTest-master/image/'
         chess_board = pygame.image.load(image_path + 'board_image.png').convert()
+        screen.fill(background_color)
 
 
 
