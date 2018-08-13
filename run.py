@@ -250,10 +250,7 @@ class Run(object):
                         if l3 in range(8) and n3 in range(8):
                             move = letters[l1] + numbers[n1] + letters[l3] + numbers[n3]
                             labels_array.append(move)
-        pawn = ['a2a3','a2a4','b2b3','b2b4','c2c3','c2c4','d2d3','d2d4','e2e3','e2e4','f2f3','f2f4','g2g3','g2g4',
-                'h2h3','h2h4','a7a6','a7a5','b7b6','b7b5','c7c6','c7c5','d7d6','d7d5','e7e6','e7e5','f7f6','f7f5',
-                'g7g6','g7g5','h7h6','h7h5',
-                'a7a8n','a7a8b','a7a8r','a7a8q','a7b8n','a7b8b','a7b8r','a7b8q',
+        pawn = ['a7a8n','a7a8b','a7a8r','a7a8q','a7b8n','a7b8b','a7b8r','a7b8q',
                 'b7a8n','b7a8b','b7a8r','b7a8q','b7b8n','b7b8b','b7b8r','b7b8q','b7c8n','b7c8b','b7c8r','b7c8q'
                 ,'c7b8n','c7b8b','c7b8r','c7b8q','c7c8n','c7c8b','c7c8r','c7c8q','c7d8n','c7d8b','c7d8r','c7d8q'
                 ,'d7c8n','d7c8b','d7c8r','d7c8q','d7d8n','d7d8b','d7d8r','d7d8q','d7e8n','d7e8b','d7e8r','d7e8q'
@@ -268,8 +265,7 @@ class Run(object):
                 ,'e2d1n','e2e1n','e2f1n','e2d1b','e2e1b','e2f1b','e2d1r','e2e1r','e2f1r','e2d1q','e2e1q','e2f1q'
                 ,'f2e1n','f2f1n','f2g1n','f2e1b','f2f1b','f2g1b','f2e1r','f2f1r','f2g1r','f2e1q','f2f1q','f2g1q'
                 ,'g2f1n','g2g1n','g2h1n','g2f1b','g2g1b','g2h1b','g2f1r','g2g1r','g2h1r','g2f1q','g2g1q','g2h1q'
-                ,'h2g1n','h2h1n','h2g1b','h2h1b','h2g1r','h2h1r','h2g1q','h2h1q',
-                'e1g1','e1c1','e8c8','e8g8'
+                ,'h2g1n','h2h1n','h2g1b','h2h1b','h2g1r','h2h1r','h2g1q','h2h1q'
                 ]
 
         for i in range(len(pawn)):
