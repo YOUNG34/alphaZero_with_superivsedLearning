@@ -613,15 +613,19 @@ class Run(object):
         labels_array = []
         letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
         numbers = ['1', '2', '3', '4', '5', '6', '7', '8']
-        direction_for_queen_and_king = [(0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1), (1, 0), (1, 1)]
-        direction_for_knight = [(-2, -1), (-1, -2), (-2, 1), (1, -2), (2, -1), (-1, 2), (2, 1), (1, 2)]
+        direction_for_queen_and_king = [(0, 1), (-1, 1), (-1, 0), (-1, -1), 
+                                        (0, -1), (1, -1), (1, 0), (1, 1)]
+        direction_for_knight = [(-2, -1), (-1, -2), (-2, 1), (1, -2), 
+                                (2, -1), (-1, 2), (2, 1), (1, 2)]
 
         for l1 in range(8):
             for n1 in range(8):
                 for d in range(8):
                     for i in range(8):
-                        (l2, n2) = (l1 + direction_for_queen_and_king[d][0] * i, n1 + direction_for_queen_and_king[d][1] * i)
-                        (l3, n3) = (l1 + direction_for_knight[d][0] * i, n1 + direction_for_knight[d][1] * i)
+                        (l2, n2) = (l1 + direction_for_queen_and_king[d][0] * i,
+                                    n1 + direction_for_queen_and_king[d][1] * i)
+                        (l3, n3) = (l1 + direction_for_knight[d][0] * i, 
+                                    n1 + direction_for_knight[d][1] * i)
                         if l2 in range(8) and n2 in range(8):
                             move = letters[l1] + numbers[n1] + letters[l2] + numbers[n2]
                             labels_array.append(move)
