@@ -45,9 +45,10 @@ class GUI(object):
         chess_sets = Settings()
         screen = pygame.display.set_mode((chess_sets.screen_width, chess_sets.screen_height))
         pygame.display.set_caption("Chess Game")
-
         pygame.init()
+        
         image_path = '/home/k1758068/Desktop/alphaGoTest-master/image/'
+        
         black_b = pygame.image.load(image_path + 'blackb.png').convert_alpha()
         black_k = pygame.image.load(image_path + 'blackk.png').convert_alpha()
         black_n = pygame.image.load(image_path + 'blackn.png').convert_alpha()
@@ -66,7 +67,7 @@ class GUI(object):
                        1: [white_p, black_p], 5: [white_q, black_q], 4: [white_r, black_r]}
 
         background_color = (230,230,230)
-        image_path = '/home/k1758068/Desktop/alphaGoTest-master/image/'
+        
         chess_board = pygame.image.load(image_path + 'board_image.png').convert()
         screen.fill(background_color)
 
