@@ -29,6 +29,7 @@ def policy_value_fn(board):
     tuples and a score for the state"""
     # return uniform probabilities and 0 score for pure MCTS
     num = len(list(board.generate_legal_moves()))
+    
     moves = list(board.generate_legal_moves())
     for i in range(len(moves)):
         moves[i] = moves[i].uci()
@@ -107,7 +108,7 @@ class TreeNode(object):
 class MCTS(object):
     """A simple implementation of Monte Carlo Tree Search."""
 
-    def __init__(self, policy_value_fn, c_puct=5, n_playout=10000):
+    def __init__(self, policy_value_fn, c_puct=5, n_playout=1000):
         """
         policy_value_fn: a function that takes in a board state and outputs
             a list of (action, probability) tuples and also a score in [-1, 1]
@@ -144,6 +145,7 @@ class MCTS(object):
             node.expand(action_probs)
         # Evaluate the leaf node by random rollout
         leaf_value = self._evaluate_rollout(state)
+        #print("value",leaf_value)
         # Update value and visit count of nodes in this traversal.
         node.update_recursive(-leaf_value)
 
@@ -173,9 +175,10 @@ class MCTS(object):
                     return 1
                 else:
                     return 0
-        else:
-            # If no break from the loop, issue a warning.
-            print("WARNING: rollout reached move limit")
+
+        # else:
+        #     # If no break from the loop, issue a warning.
+        #     print("WARNING: rollout reached move limit")
 
 
 
@@ -223,7 +226,7 @@ class MCTSPlayer(object):
             self.mcts.update_with_move(-1)
             return move
         else:
-            print("WARNING: the board is full")
+            print("WARNING: There is not available move")
 
     def __str__(self):
         return "MCTS {}".format(self.player)
