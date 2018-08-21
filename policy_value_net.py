@@ -74,7 +74,7 @@ class Policy_value_net():
         l2_penalty = l2_penalty_beta * tf.add_n(
             [tf.nn.l2_loss(v) for v in vars if 'bias' not in v.name.lower()])
         # 3-4 Add up to be the Loss function
-        self.loss = self.value_loss + self.policy_loss + l2_penalty
+        self.loss = 0.01*self.value_loss + 0.99*self.policy_loss + l2_penalty
 
         self.learning_rate = tf.placeholder(tf.float32)
         self.optimizer = tf.train.AdamOptimizer(
@@ -172,3 +172,14 @@ class Policy_value_net():
 
     def restore_model(self,model_path):
         self.saver.restore(self.sess, model_path)
+
+
+
+
+
+
+
+
+
+
+
