@@ -8,6 +8,9 @@ import chess
 import random
 import numpy as np
 import os
+import json
+import matplotlib.pyplot as plt
+
 
 class Train():
 
@@ -15,14 +18,15 @@ class Train():
         self.board_width = 8
         self.board_height = 8
         self.readed_files_count = 0
+        self.valid_files_num = 0
 
         self.run_game = Run()
 
-        self.learn_rate = 2e-3
+        self.learn_rate = 1e-6
         self.lr_multiplier = 1.0
         self.temp = 1.0
-        self.chess_mcts_playout = 1
-        self.mcts_num = 1
+        self.chess_mcts_playout = 4
+        self.mcts_num = 10
         self.c_puct = 5
         self.buffer_size = 10000
         self.batch_size = 384
@@ -30,9 +34,12 @@ class Train():
         self.play_batch_size = 1
         self.epochs = 5
         self.kl_targ = 0.02
-        self.check_freq = 1
-        self.game_batch_num = 1500
+        self.check_freq = 10
+        self.game_batch_num = 15000
         self.best_win_ratio = 0.0
+
+        self.loss_list = []
+        self.entropy_list = []
 
         if init_model:
             self.policy_value_net = Policy_value_net(model_file=init_model)
@@ -123,6 +130,7 @@ class Train():
         win_cnt = defaultdict(int)
         for i in range(n_games):
             winner = self.run_game.play_game(current_mcts_player, pure_mcts_player)
+            print(winner)
             win_cnt[winner] += 1
         win_ratio = 1.0 * (win_cnt[1] + 0.5 * win_cnt[-1]) / n_games
         print("num_playouts:{}, win: {}, lose: {}, tie:{}".format(
@@ -143,20 +151,20 @@ class Train():
                 # check the performance of the current model,
                 # and save the model params
 
-                #if (i + 1) % self.check_freq == 0:
-                print("current self-play batch: {}".format(i + 1))
-                win_ratio = self.policy_evaluate()
-                print('win_ratio',win_ratio)
-                self.policy_value_net.save_model('./current_policy.model')
-                if win_ratio > self.best_win_ratio:
-                    print("New best policy!!!!!!!!")
-                    self.best_win_ratio = win_ratio
-                    # update the best_policy
-                    self.policy_value_net.save_model('./best_policy.model')
-                    if (self.best_win_ratio == 1.0 and
-                            self.mcts_num < 5000):
-                        self.mcts_num += 1000
-                        self.best_win_ratio = 0.0
+                if (i + 1) % self.check_freq == 0:
+                    print("current self-play batch: {}".format(i + 1))
+                    win_ratio = self.policy_evaluate()
+                    print('win_ratio',win_ratio)
+                    self.policy_value_net.save_model('./current_policy.model')
+                    if win_ratio > self.best_win_ratio:
+                        print("New best policy!!!!!!!!")
+                        self.best_win_ratio = win_ratio
+                        # update the best_policy
+                        self.policy_value_net.save_model('./best_policy.model')
+                        if (self.best_win_ratio == 1.0 and
+                                self.mcts_num < 5000):
+                            self.mcts_num += 1000
+                            self.best_win_ratio = 0.0
         except KeyboardInterrupt:
             print('\n\rquit')
 
@@ -164,31 +172,58 @@ class Train():
         supervised_learning = Supervised_learning()
 
         self.result, play_data = supervised_learning.supervised_learning_run(index)
-        play_data = list(play_data)[:]
+        if play_data != False:
+            play_data = list(play_data)[:]
 
-        self.episode_len = len(play_data)
-        self.data_buffer.extend(play_data)
+            self.episode_len = len(play_data)
+            self.data_buffer.extend(play_data)
+
         # print(self.data_buffer)
 
-    def supervised_learning_run(self):
-        supervised_learning = Supervised_learning()
-        supervised_learning.prepare()
+    def supervised_learning(self):
+
+        self.batch_num = 0
         for i in range(self.game_batch_num):
             #path = '/Users/zeyang/Desktop/alphaGoTest-master/move_json_files'
             path = '/home/k1758068/Desktop/alphaGoTest-master/move_json_files'
             files = os.listdir(path)
-            for j in range(self.readed_files_count + 1 ,self.readed_files_count+11):
-                self.collect_supervised_learning_data(j)
+
+            #for j in range(self.readed_files_count + 1 ,self.readed_files_count+21):
+            self.collect_supervised_learning_data(i+1)
+            if self.result == False:
+                #print("Invilid file.")
+                continue
+            else:
+                self.valid_files_num += 1
                 print("batch i:{}, episode_len:{}, result:{}".format(
-                    j, self.episode_len, self.result))
+                    self.valid_files_num, self.episode_len, self.result))
+
             self.readed_files_count += 10
             if len(self.data_buffer) > self.batch_size:
                 loss, entropy = self.policy_update()
+                self.file_name = '/home/k1758068/Desktop/alphaGoTest-master/loss_entropy.json'
+                with open(self.file_name, "a") as loss_file:
+                    json.dump(str([loss, entropy]), loss_file)
+                self.loss_list.append(loss)
+                self.entropy_list.append(entropy)
+                self.data_buffer = []
+
 
             # check the performance of the current model,
             # and save the model params
-
-            if (i + 1) % self.check_freq == 0:
+            #
+            if (i+1) % self.check_freq == 0:
+                # x = []
+                # for k in range(len(self.entropy_list)):
+                #     x.append(k+1)
+                # plt.figure()
+                # fig, ax = plt.subplots(2)
+                # ax[0].plot(x, self.loss_list, linestyle='-', color='red')
+                # ax[1].plot(x, self.entropy_list, linestyle='--', color='green')
+                #
+                # plt.figure().savefig('my_loss_and_entropy_figure.png')
+                #
+                # plt.show()
                 print("current self-play batch: {}".format(i + 1))
                 #win_ratio = self.policy_evaluate()
                 #print('win_ratio', win_ratio)
@@ -205,5 +240,6 @@ class Train():
                 #         self.best_win_ratio = 0.0
 
 if __name__ == '__main__':
-    training = Train()
-    training.supervised_learning_run()
+    training = Train('./current_policy.model')
+    training.supervised_learning()
+    #training.run()
