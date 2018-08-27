@@ -1,245 +1,191 @@
-
-from mcts_pure import MCTSPlayer as MCTS_Pure
-from mcts_for_train import MCTSPlayer
-from policy_value_net import Policy_value_net
-from collections import defaultdict, deque
-from run import Run,Supervised_learning
-import chess
-import random
 import numpy as np
-import os
-import json
-import matplotlib.pyplot as plt
+import tensorflow as tf
+from run import Run
+import chess
 
 
-class Train():
+class Policy_value_net():
 
-    def __init__(self, init_model = None):
-        self.board_width = 8
-        self.board_height = 8
-        self.readed_files_count = 0
-        self.valid_files_num = 0
+    def __init__(self,model_file = None):
+        board_width = 8
+        board_height = 8
+        self.board_width = board_width
+        self.board_height = board_height
+        self.learning_rate = tf.placeholder(tf.float32, name='learning_rate')  # 0.001    #5e-3    #0.05    #
+        tf.summary.scalar('learning_rate', self.learning_rate)
 
-        self.run_game = Run()
+        self.training = tf.placeholder(tf.bool, name='training')
+        #self.training = True
 
-        self.learn_rate = 1e-3
-        self.lr_multiplier = 1.0
-        self.temp = 1.0
-        self.chess_mcts_playout = 4
-        self.mcts_num = 10
-        self.c_puct = 5
-        self.buffer_size = 10000
-        self.batch_size = 384
-        self.data_buffer = deque(maxlen=self.buffer_size)
-        self.play_batch_size = 1
-        self.epochs = 5
-        self.kl_targ = 0.02
-        self.check_freq = 10
-        self.game_batch_num = 1500
-        self.best_win_ratio = 0.0
+        # Define the tensorflow neural network
+        # 1. Input:
+        self.input_states = tf.placeholder(
+            tf.float32, shape=[None, 18, board_height, board_width]) # 'channels_first'
+        self.input = tf.transpose(self.input_states, [0, 2, 3, 1]) # 'channels_last'
+        # 2. Common Networks Layers
+        regularizer = tf.contrib.layers.l2_regularizer(scale=0.0001)
+        self.conv1 = tf.layers.conv2d(inputs=self.input,
+                                      filters=256, kernel_size=[3, 3],
+                                      padding='SAME', data_format="channels_last",
+                                      kernel_regularizer=regularizer)
+        self.conv1 = tf.contrib.layers.batch_norm(self.conv1, center=False, epsilon=1e-5, fused=True,
+                                                  is_training=self.training)
+        self.conv1 = tf.nn.relu(self.conv1)
 
-        self.loss_list = []
-        self.entropy_list = []
+        # Residual_block
+        self.residual_layer = self.conv1
+        for i in range(7):
+            self.residual_layer = self.residual_block(self.residual_layer,i)
 
-        if init_model:
-            self.policy_value_net = Policy_value_net(model_file=init_model)
-        else:
-            self.policy_value_net = Policy_value_net()
+        # Policy_head
+        self.policy_head = tf.layers.conv2d(inputs=self.residual_layer, filters=2,
+                                            kernel_size=[1, 1], padding='SAME',
+                                            data_format="channels_last",
+                                            kernel_regularizer=regularizer)
+        self.policy_head = tf.contrib.layers.batch_norm(self.policy_head, center=False, epsilon=1e-5,fused=True,
+                                                        is_training=self.training)
+        self.policy_head = tf.nn.relu(self.policy_head)
+        self.policy_head = tf.layers.flatten(self.policy_head)
+        self.policy_head = tf.contrib.layers.fully_connected(inputs=self.policy_head,
+                                                             num_outputs=3300,
+                                                             activation_fn=tf.nn.softmax)
 
-        self.mcts_player = MCTSPlayer(self.policy_value_net.policy_value_fn,
-                                      c_puct=self.c_puct,
-                                      n_playout=self.chess_mcts_playout,
-                                      is_selfplay=1)
 
-    def collect_selfplay_data(self, n_games=1):
-        for i in range(n_games):
-            self.result, play_data = self.run_game.start_self_play(self.mcts_player, temp=self.temp)
-            play_data = list(play_data)[:]
-            #print(np.array(play_data))
-            #print('play_data[0][0]',play_data[0][0])
-            self.episode_len = len(play_data)
-            self.data_buffer.extend(play_data)
-            #print(self.data_buffer)
+        # Value_head
+        self.value_head = tf.layers.conv2d(inputs=self.residual_layer,filters=4,kernel_size=[1,1],
+                                           padding='SAME', kernel_regularizer=regularizer)
+        self.value_head = tf.contrib.layers.batch_norm(inputs=self.value_head, center=False, epsilon=1e-5, fused=True,
+                                                       is_training=self.training)
+        self.value_head = tf.nn.relu(self.value_head)
+        self.value_head = tf.layers.flatten(self.value_head)
+        self.value_head = tf.contrib.layers.fully_connected(self.value_head, 256,
+                                                            activation_fn=tf.nn.relu)
+        self.value_head = tf.contrib.layers.fully_connected(self.value_head, 1,
+                                                            activation_fn=tf.nn.tanh)
 
-    def policy_update(self):
-       # assert self.data_buffer.reshape() == (None,18,8,8)
-        mini_batch = self.data_buffer #random.sample(self.data_buffer, self.batch_size)
-        #print(np.array(mini_batch).shape)
-        state_batch = np.array([data[0] for data in mini_batch])
 
-        mcts_probs_batch = [data[1] for data in mini_batch]
-        winner_batch = [data[2] for data in mini_batch]
-        old_probs, old_v = self.policy_value_net.policy_value(state_batch)
+        # Value loss function
+        self.z_ = tf.placeholder(tf.float32, [None, 1], name='z')
+        self.value_loss = tf.losses.mean_squared_error(labels=self.z_, predictions=self.value_head)
+        self.value_loss = tf.reduce_mean(self.value_loss)
 
-        for i in range(self.epochs):
-            loss, entropy = self.policy_value_net.train_step(
-                    state_batch,
-                    mcts_probs_batch,
-                    winner_batch,
-                    self.learn_rate*self.lr_multiplier)
+        # Policy loss function
+        self.pi_ = tf.placeholder(tf.float32, [None, 3300], name='pi')
+        self.policy_loss = tf.nn.softmax_cross_entropy_with_logits(labels=self.pi_, logits=self.policy_head)
+        self.policy_loss = tf.reduce_mean(self.policy_loss)
 
-            new_probs, new_v = self.policy_value_net.policy_value(state_batch)
-            #print('new_probs, new_v',new_probs, new_v)
-            kl = np.mean(np.sum(old_probs * (
-                    np.log(old_probs + 1e-10) - np.log(new_probs + 1e-10)),
-                    axis=1)
-            )
-            #print('kl',kl)
-            if kl > self.kl_targ * 4:  # early stopping if D_KL diverges badly
-                break
-        # adaptively adjust the learning rate
-        if kl > self.kl_targ * 2 and self.lr_multiplier > 0.1:
-            self.lr_multiplier /= 1.5
-        elif kl < self.kl_targ / 2 and self.lr_multiplier < 10:
-            self.lr_multiplier *= 1.5
+        l2_penalty_beta = 1e-4
+        vars = tf.trainable_variables()
+        l2_penalty = l2_penalty_beta * tf.add_n(
+            [tf.nn.l2_loss(v) for v in vars if 'bias' not in v.name.lower()])
+        # 3-4 Add up to be the Loss function
+        self.loss = 0.01*self.value_loss + 0.99*self.policy_loss + l2_penalty
 
-        #print('self.lr_multiplier',self.lr_multiplier)
-        explained_var_old = (1 -
-                             np.var(np.array(winner_batch) - old_v.flatten()) /
-                             np.var(np.array(winner_batch)))
-        explained_var_new = (1 -
-                             np.var(np.array(winner_batch) - new_v.flatten()) /
-                             np.var(np.array(winner_batch)))
-        print('explained_var_old',explained_var_old)
-        print('explained_var_new',explained_var_new)
-        print(("kl:{:.5f},"
-               "lr_multiplier:{:.3f},"
-               "loss:{},"
-               "entropy:{},"
-               "explained_var_old:{:.3f},"
-               "explained_var_new:{:.3f}"
-               ).format(kl,
-                        self.lr_multiplier,
-                        loss,
-                        entropy,
-                        explained_var_old,
-                        explained_var_new))
-        print('loss,entropy',loss,entropy)
+        self.learning_rate = tf.placeholder(tf.float32)
+        self.optimizer = tf.train.AdamOptimizer(
+            learning_rate=self.learning_rate).minimize(self.loss)
+
+        self.sess = tf.Session()
+
+        #         self.sess.run(tf.local_variables_initializer())
+        #         self.sess.run(tf.initialize_all_variables())
+
+        # calc policy entropy, for monitoring only
+        self.entropy = tf.negative(tf.reduce_mean(
+            tf.reduce_sum(tf.exp(self.policy_head) * self.policy_head, 1)))
+
+        # Initialize variables
+        init = tf.global_variables_initializer()
+        self.sess.run(init)
+
+        # For saving and restoring
+        self.saver = tf.train.Saver()
+        if model_file is not None:
+            self.restore_model(model_file)
+
+
+
+    def residual_block(self, input, index):
+        regularizer = tf.contrib.layers.l2_regularizer(scale=0.0001)
+        res_name = "res" + str(index)
+        orig = tf.identity(input)
+        residual_layer = tf.layers.conv2d(inputs=input,
+                                          filters=256,
+                                          kernel_size=3,
+                                          padding='SAME',
+                                          data_format='channels_last',
+                                          use_bias=False,
+                                          kernel_regularizer=regularizer,
+                                          name=res_name+"_conv1-"+str(3)+"-"+str(256),
+                                          activation=tf.nn.relu)
+        residual_layer = tf.contrib.layers.batch_norm(residual_layer, center=False, epsilon=1e-5, fused=True,
+                                             is_training=self.training, activation_fn=tf.nn.relu)
+        residual_layer = tf.nn.relu(residual_layer)
+
+        residual_layer = tf.layers.conv2d(inputs=residual_layer,
+                                          filters=256, kernel_size=3, padding='SAME',
+                                          data_format='channels_last', use_bias=False,
+                                          kernel_regularizer=regularizer,
+                                          name=res_name + "_conv2-" + str(3) + "-" + str(256))
+        residual_layer = tf.contrib.layers.batch_norm(inputs=residual_layer, center=False,
+                                                      epsilon=1e-5, fused=True,
+                                                      is_training=self.training)
+        output = tf.nn.relu(tf.add(orig,residual_layer))
+
+        return output
+
+    def policy_value(self, state_batch):
+        log_act_probs,value = self.sess.run(
+            [self.policy_head, self.value_head],
+            feed_dict={self.input_states:state_batch,
+                       self.training:False}
+        )
+        act_probs = np.exp(log_act_probs)
+        #print('value',value)
+        return act_probs, value
+
+    def policy_value_fn(self,board):
+        run_game = Run()
+        legal_positions = []
+        for i in list(board.generate_legal_moves()):
+            legal_positions.append(i.uci())
+        current_state = np.ascontiguousarray(run_game.current_state().reshape(-1,18,8,8))
+        #current_state = run_game.current_state()
+        #print(current_state)
+        act_probs, value = self.policy_value(current_state)
+        act_probs = zip(legal_positions, act_probs[0])
+        #print('act_probs,value', list(act_probs), value)
+        return act_probs, value
+
+
+
+
+
+    def train_step(self, positions, probs, winners, learning_rate):
+        winners = np.reshape(winners, (-1, 1))
+        loss, entropy, _ = self.sess.run(
+            [self.loss, self.entropy, self.optimizer],
+            feed_dict={self.input_states:positions,
+                       self.pi_:probs,
+                       self.z_: winners,
+                       self.learning_rate: learning_rate,
+                       self.training: True})
         return loss, entropy
 
-    def policy_evaluate(self, n_games=10):
-        """
-        Evaluate the trained policy by playing against the pure MCTS player
-        Note: this is only for monitoring the progress of training
-        """
-        current_mcts_player = MCTSPlayer(self.policy_value_net.policy_value_fn,
-                                         c_puct=self.c_puct,
-                                         n_playout=self.chess_mcts_playout)
-        pure_mcts_player = MCTS_Pure(c_puct=5,
-                                     n_playout=self.mcts_num)
-        win_cnt = defaultdict(int)
-        for i in range(n_games):
-            winner = self.run_game.play_game(current_mcts_player, pure_mcts_player)
-            print(winner)
-            win_cnt[winner] += 1
-        win_ratio = 1.0 * (win_cnt[1] + 0.5 * win_cnt[-1]) / n_games
-        print("num_playouts:{}, win: {}, lose: {}, tie:{}".format(
-            self.mcts_num,
-            win_cnt[1], win_cnt[2], win_cnt[-1]))
-        return win_ratio
 
-    def run(self):
-        """run the training pipeline"""
-        try:
-            for i in range(self.game_batch_num):
-                self.collect_selfplay_data(self.play_batch_size)
-                print("batch i:{}, episode_len:{}, result:{}".format(
-                    i + 1, self.episode_len, self.result))
-                if len(self.data_buffer) > self.batch_size:
-                    loss, entropy = self.policy_update()
+    def save_model(self, model_path):
+        self.saver.save(self.sess, model_path)
 
-                # check the performance of the current model,
-                # and save the model params
-
-                if (i + 1) % self.check_freq == 0:
-                    print("current self-play batch: {}".format(i + 1))
-                    win_ratio = self.policy_evaluate()
-                    print('win_ratio',win_ratio)
-                    self.policy_value_net.save_model('./current_policy.model')
-                    if win_ratio > self.best_win_ratio:
-                        print("New best policy!!!!!!!!")
-                        self.best_win_ratio = win_ratio
-                        # update the best_policy
-                        self.policy_value_net.save_model('./best_policy.model')
-                        if (self.best_win_ratio == 1.0 and
-                                self.mcts_num < 5000):
-                            self.mcts_num += 1000
-                            self.best_win_ratio = 0.0
-        except KeyboardInterrupt:
-            print('\n\rquit')
-
-    def collect_supervised_learning_data(self, index):
-        supervised_learning = Supervised_learning()
-
-        self.result, play_data = supervised_learning.supervised_learning_run(index)
-        if play_data != False:
-            play_data = list(play_data)[:]
-
-            self.episode_len = len(play_data)
-            self.data_buffer.extend(play_data)
-
-        # print(self.data_buffer)
-
-    def supervised_learning(self):
-
-        self.batch_num = 0
-        for i in range(self.game_batch_num):
-            #path = '/Users/zeyang/Desktop/alphaGoTest-master/move_json_files'
-            path = '/home/k1758068/Desktop/alphaGoTest-master/move_json_files'
-            files = os.listdir(path)
-
-            #for j in range(self.readed_files_count + 1 ,self.readed_files_count+21):
-            self.collect_supervised_learning_data(i+1)
-            if self.result == False:
-                #print("Invilid file.")
-                continue
-            else:
-                #self.valid_files_num += 1
-                print("batch i:{}, episode_len:{}, result:{}".format(
-                    self.valid_files_num, self.episode_len, self.result))
-
-            self.readed_files_count += 10
-            if len(self.data_buffer) > self.batch_size:
-                loss, entropy = self.policy_update()
-                self.file_name = '/home/k1758068/Desktop/alphaGoTest-master/loss_entropy.json'
-                with open(self.file_name, "a") as loss_file:
-                    json.dump(str([loss, entropy]), loss_file)
-                self.loss_list.append(loss)
-                self.entropy_list.append(entropy)
-                self.data_buffer = []
+    def restore_model(self,model_path):
+        self.saver.restore(self.sess, model_path)
 
 
-            # check the performance of the current model,
-            # and save the model params
-            #
-            if (i+1) % self.check_freq == 0:
-                # x = []
-                # for k in range(len(self.entropy_list)):
-                #     x.append(k+1)
-                # plt.figure()
-                # fig, ax = plt.subplots(2)
-                # ax[0].plot(x, self.loss_list, linestyle='-', color='red')
-                # ax[1].plot(x, self.entropy_list, linestyle='--', color='green')
-                #
-                # plt.figure().savefig('my_loss_and_entropy_figure.png')
-                #
-                # plt.show()
-                print("current self-play batch: {}".format(i + 1))
-                #win_ratio = self.policy_evaluate()
-                #print('win_ratio', win_ratio)
-                self.policy_value_net.save_model('./current_policy.model')
-                self.data_buffer = []
-                # if win_ratio > self.best_win_ratio:
-                #     print("New best policy!!!!!!!!")
-                #     self.best_win_ratio = win_ratio
-                #     # update the best_policy
-                #     self.policy_value_net.save_model('./best_policy.model')
-                #     if (self.best_win_ratio == 1.0 and
-                #             self.mcts_num < 5000):
-                #         self.mcts_num += 1000
-                #         self.best_win_ratio = 0.0
 
-if __name__ == '__main__':
-    training = Train('./current_policy.model')
-    training.supervised_learning()
-    #training.run()
+
+
+
+
+
+
+
+
